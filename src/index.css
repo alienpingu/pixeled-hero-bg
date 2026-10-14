@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+/* Page shell: monospace cyberpunk base. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #0d0d0d;
+  color: #e5e5e5;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  -webkit-font-smoothing: antialiased;
+}
