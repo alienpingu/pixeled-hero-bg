@@ -1,4 +1,6 @@
+import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { HeroPixelCanvas } from './components/HeroPixelCanvas/HeroPixelCanvas';
+import { useTheme } from './hooks/useTheme';
 
 /**
  * Demo page — overlay content is hidden while we iterate on the canvas.
@@ -7,8 +9,17 @@ import { HeroPixelCanvas } from './components/HeroPixelCanvas/HeroPixelCanvas';
 const SHOW_OVERLAY = false;
 
 export default function App() {
+  const { theme, setThemeId } = useTheme();
+
   return (
-    <HeroPixelCanvas className="h-screen w-screen" logoText="PIXEL" accentColor="#4ade80">
+    <HeroPixelCanvas
+      className="h-[100dvh] w-screen"
+      logoText="brtsml"
+      accentColor={theme.accent}
+      backgroundColor={theme.background}
+    >
+      <ThemeSwitcher theme={theme} onSelect={setThemeId} />
+
       {SHOW_OVERLAY && (
         <>
           {/* Top nav */}

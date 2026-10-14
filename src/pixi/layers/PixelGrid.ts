@@ -1,5 +1,6 @@
 import { Particle, ParticleContainer, type Texture } from 'pixi.js';
 import { grayRamp, mixColor } from '../color';
+import { TUNING } from '../tuning';
 import type { GlitchView } from '../types';
 
 /**
@@ -7,26 +8,30 @@ import type { GlitchView } from '../types';
  *
  * Every cell is a lightweight {@link Particle} sharing one white texture;
  * only `tint`/`alpha` (color) is dynamic, positions are static and only
- * re-uploaded when `ParticleContainer.update()` is called (layout / row-shift).
- * Each cell re-rolls its gray tone on its own random timer, so only a small
- * slice of the grid is rewritten per frame.
+ * re-uploaded when `ParticleContainer.update()` is called (layout). Each cell
+ * re-rolls its gray tone on its own random timer, so only a small slice of
+ * the grid is rewritten per frame. Motion speed/intensity lives in TUNING.
  */
 export class PixelGrid {
   readonly container: ParticleContainer;
-  readonly pixelSize: number;
-  readonly gap: number;
-  readonly stride: number;
 
   private particles: Particle[] = [];
   private refreshIn = new Float32Array(0);
   private cols = 0;
   private rows = 0;
-  private rowShift = new Int16Array(0);
+  private currentStride = 18;
+  // Cells tinted by the glitch this frame, with their pre-glitch tint, so
+  // ring/scramble marks vanish after one frame (noise re-rolls are slow).
+  private touchedList: number[] = [];
+  private touchedTint: number[] = [];
+  private touchedMark = new Uint8Array(0);
 
-  constructor(texture: Texture, pixelSize: number, gap = Math.max(1, Math.round(pixelSize / 8))) {
-    this.pixelSize = pixelSize;
-    this.gap = gap;
-    this.stride = pixelSize + gap;
+  /** Current cell stride (pixelSize + gap), valid after `layout()`. */
+  get stride(): number {
+    return this.currentStride;
+  }
+
+  constructor(texture: Texture) {
     this.container = new ParticleContainer({
       texture,
       roundPixels: true,
@@ -34,16 +39,24 @@ export class PixelGrid {
     });
   }
 
-  /** (Re)build the matrix for a grid of `cols` × `rows` cells. */
-  layout(cols: number, rows: number): void {
+  /**
+   * (Re)build the matrix for a grid of `cols` × `rows` cells.
+   * Cell metrics are inputs (not constructor state) so the grid can adapt
+   * to the screen size on every resize.
+   */
+  layout(cols: number, rows: number, pixelSize: number, gap: number): void {
     this.cols = cols;
     this.rows = rows;
+    const stride = pixelSize + gap;
+    this.currentStride = stride;
     const count = cols * rows;
 
     this.container.removeParticles();
     this.particles = new Array(count);
     this.refreshIn = new Float32Array(count);
-    this.rowShift = new Int16Array(rows);
+    this.touchedMark = new Uint8Array(count);
+    this.touchedList = [];
+    this.touchedTint = [];
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -51,56 +64,32 @@ export class PixelGrid {
         const v = Math.pow(Math.random(), 2.2); // biased toward dim cells
         const p = new Particle({
           texture: this.container.texture,
-          x: c * this.stride,
-          y: r * this.stride,
+          x: c * stride,
+          y: r * stride,
           // Texture.WHITE is 1×1 — scale it up to a full LED square.
-          scaleX: this.pixelSize,
-          scaleY: this.pixelSize,
+          scaleX: pixelSize,
+          scaleY: pixelSize,
           tint: grayRamp(v),
         });
         this.particles[i] = p;
-        this.refreshIn[i] = Math.random() * 400;
+        this.refreshIn[i] = TUNING.noise.refreshMin + Math.random() * TUNING.noise.refreshJitter;
         this.container.addParticle(p);
       }
     }
     this.container.update(); // positions are static
   }
 
-  update(dt: number, time: number, accent: number, glitch: GlitchView): void {
-    this.refreshNoise(dt, time, accent);
+  update(dt: number, _time: number, accent: number, glitch: GlitchView): void {
+    this.refreshNoise(dt, accent);
     if (glitch.active) this.applyGlitchFrame(accent, glitch);
   }
 
-  /** Scramble rows once when a glitch begins (static positions → update() once). */
-  beginGlitch(): void {
-    const shiftCount = 2 + ((Math.random() * 3) | 0);
-    for (let n = 0; n < shiftCount; n++) {
-      const r = (Math.random() * this.rows) | 0;
-      if (this.rowShift[r] !== 0) continue;
-      const shift = (((Math.random() * 5) | 0) - 2) * this.stride;
-      if (shift === 0) continue;
-      this.rowShift[r] = shift;
-      const base = r * this.cols;
-      for (let c = 0; c < this.cols; c++) this.particles[base + c].x = c * this.stride + shift;
-    }
-    this.container.update();
-  }
-
-  /** Restore displaced rows and re-roll every cell so no scramble tint lingers. */
+  /**
+   * Dissolve the ring at glitch end: restore whatever the last frame's ring
+   * tinted. No full re-roll — the field must look untouched by the click.
+   */
   settleGlitch(): void {
-    for (let r = 0; r < this.rows; r++) {
-      const shift = this.rowShift[r];
-      if (shift === 0) continue;
-      const base = r * this.cols;
-      for (let c = 0; c < this.cols; c++) this.particles[base + c].x = c * this.stride;
-      this.rowShift[r] = 0;
-    }
-    for (let i = 0; i < this.particles.length; i++) {
-      const v = Math.pow(Math.random(), 2.2);
-      this.particles[i].tint = grayRamp(v);
-      this.refreshIn[i] = Math.random() * 400;
-    }
-    this.container.update();
+    this.restoreTouched();
   }
 
   destroy(): void {
@@ -113,49 +102,71 @@ export class PixelGrid {
     return { col: Math.floor(x / this.stride), row: Math.floor(y / this.stride) };
   }
 
-  private refreshNoise(dt: number, _time: number, accent: number): void {
+  private refreshNoise(dt: number, accent: number): void {
     const { particles, refreshIn } = this;
+    const { hotChance, hotHoldMin, hotHoldJitter, refreshMin, refreshJitter } = TUNING.noise;
     for (let i = 0; i < particles.length; i++) {
       refreshIn[i] -= dt;
       if (refreshIn[i] > 0) continue;
       // Sparse "hot" accent pixels hint at the brand color inside the static.
-      const hot = Math.random() < 0.012;
-      if (hot) {
+      if (Math.random() < hotChance) {
         particles[i].tint = accent;
-        refreshIn[i] = 60 + Math.random() * 140;
+        refreshIn[i] = hotHoldMin + Math.random() * hotHoldJitter;
       } else {
         particles[i].tint = grayRamp(Math.pow(Math.random(), 2.2));
-        refreshIn[i] = 40 + Math.random() * 380;
+        refreshIn[i] = refreshMin + Math.random() * refreshJitter;
       }
     }
   }
 
   private applyGlitchFrame(accent: number, glitch: GlitchView): void {
-    const { particles } = this;
-    const count = particles.length;
+    // Undo last frame's marks first — the ring must read as ONE traveling
+    // band, not a filled disc (noise re-rolls are too slow to clear it).
+    this.restoreTouched();
 
-    // Random scramble budget scales with intensity (~7% of cells per frame).
-    const budget = Math.max(8, ((count * 0.07 * glitch.intensity) | 0));
-    for (let n = 0; n < budget; n++) {
-      const i = (Math.random() * count) | 0;
-      const roll = Math.random();
-      if (roll < 0.4) particles[i].tint = accent;
-      else if (roll < 0.65) particles[i].tint = 0xffffff;
-      else if (roll < 0.8) particles[i].tint = 0x0a0a0a;
-      else particles[i].tint = grayRamp(Math.random());
-    }
-
-    // Ripple ring expanding from the click origin.
-    const maxDist = Math.hypot(this.cols, this.rows) * 0.6;
-    const ringR = glitch.progress * maxDist;
+    // Single expanding ring from the click origin: eased outward, continuous,
+    // and fading from bright accent to dim gray as it travels. Nothing else
+    // in the field changes — the ring is the entire click effect here.
+    const { ringWidth, ringContinuity, ringWhiteMix } = TUNING.glitch;
+    const p = glitch.progress;
+    const eased = 1 - (1 - p) * (1 - p); // easeOutQuad
+    const ringR = eased * Math.hypot(this.cols, this.rows) * 0.6;
+    const ringColor = mixColor(
+      mixColor(accent, 0xffffff, ringWhiteMix * (1 - p)),
+      0x141414,
+      p * 0.6,
+    );
     const { originCol, originRow } = glitch;
+    const halfWidth = ringWidth / 2;
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const d = Math.hypot(c - originCol, r - originRow);
-        if (Math.abs(d - ringR) < 1.3 && Math.random() < 0.55) {
-          particles[r * this.cols + c].tint = mixColor(accent, 0xffffff, Math.random() * 0.65);
+        if (Math.abs(d - ringR) < halfWidth && Math.random() < ringContinuity) {
+          this.touchTint(r * this.cols + c, ringColor);
         }
       }
     }
+  }
+
+  /** Tint a cell while remembering its pre-glitch tint (once per frame). */
+  private touchTint(index: number, tint: number): void {
+    if (this.touchedMark[index] === 0) {
+      this.touchedMark[index] = 1;
+      this.touchedList.push(index);
+      this.touchedTint.push(this.particles[index].tint);
+    }
+    this.particles[index].tint = tint;
+  }
+
+  /** Restore every cell touched last frame to its pre-glitch tint. */
+  private restoreTouched(): void {
+    const { touchedList, touchedTint, touchedMark } = this;
+    for (let n = 0; n < touchedList.length; n++) {
+      const i = touchedList[n];
+      this.particles[i].tint = touchedTint[n];
+      touchedMark[i] = 0;
+    }
+    touchedList.length = 0;
+    touchedTint.length = 0;
   }
 }

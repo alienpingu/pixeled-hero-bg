@@ -1,6 +1,13 @@
 @import 'tailwindcss';
 
 /* Page shell: monospace cyberpunk base. */
+:root {
+  /* Active theme — kept in sync by useTheme(). */
+  --accent: #cba6f7;
+  --bg: #1e1e2e;
+  --text: #cdd6f4;
+}
+
 html,
 body,
 #root {
@@ -9,8 +16,10 @@ body,
 
 body {
   margin: 0;
-  background-color: #0d0d0d;
-  color: #e5e5e5;
+  background-color: var(--bg);
+  color: var(--text);
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   -webkit-font-smoothing: antialiased;
+  /* Full-bleed canvas page: no pull-to-refresh rubber band on mobile. */
+  overscroll-behavior: none;
 }

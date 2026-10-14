@@ -7,6 +7,8 @@ function resolveConfig(props: HeroPixelCanvasProps): EngineConfig {
   return {
     pixelSize: props.pixelSize ?? DEFAULT_CONFIG.pixelSize,
     gap: props.gap ?? DEFAULT_CONFIG.gap,
+    responsive: props.responsive ?? DEFAULT_CONFIG.responsive,
+    minPixelSize: props.minPixelSize ?? DEFAULT_CONFIG.minPixelSize,
     accentColor: props.accentColor ?? DEFAULT_CONFIG.accentColor,
     backgroundColor: props.backgroundColor ?? DEFAULT_CONFIG.backgroundColor,
     enableGlitchOnClick: props.enableGlitchOnClick ?? DEFAULT_CONFIG.enableGlitchOnClick,
@@ -19,8 +21,8 @@ function resolveConfig(props: HeroPixelCanvasProps): EngineConfig {
  * Owns the {@link PixelGridEngine} lifecycle for a host element.
  *
  * - Creates the engine on mount; destroys it on unmount (StrictMode-safe).
- * - Rebuilds the engine only for structural props (`pixelSize`).
- * - Streams cosmetic props into the live engine via `setConfig` — no re-init.
+ * - All prop changes (including sizing) are applied to the live engine via
+ *   `setConfig` — sizing triggers an internal re-layout, no re-init needed.
  */
 export function usePixelGridEngine(
   hostRef: RefObject<HTMLDivElement | null>,
@@ -29,12 +31,8 @@ export function usePixelGridEngine(
   const engineRef = useRef<PixelGridEngine | null>(null);
   const propsRef = useRef(props);
 
-  const pixelSize = props.pixelSize ?? DEFAULT_CONFIG.pixelSize;
-  const gap = props.gap ?? DEFAULT_CONFIG.gap;
-
-  // Runs before the lifecycle effect below: keeps the prop snapshot fresh
-  // (including on structural rebuilds) and streams cosmetic updates into the
-  // live engine without re-initializing it.
+  // Keep the prop snapshot fresh and stream every change into the live
+  // engine (sizing changes trigger an internal re-layout).
   useEffect(() => {
     propsRef.current = props;
     engineRef.current?.setConfig(resolveConfig(props));
@@ -63,5 +61,5 @@ export function usePixelGridEngine(
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [hostRef, pixelSize, gap]);
+  }, [hostRef]);
 }

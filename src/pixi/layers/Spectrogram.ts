@@ -1,11 +1,12 @@
 import { Particle, ParticleContainer, type Texture } from 'pixi.js';
 import { expDamp, mixColor } from '../color';
+import { TUNING } from '../tuning';
 
 /**
  * Bottom-of-screen audio spectrum visualizer: one column of LED particles per
- * grid column. Column heights follow the {@link SpectrumSource} output with
- * exponential smoothing; the topmost lit pixel is mixed toward white for a
- * bright "peak" LED look.
+ * grid column. Bars rise upward from the screen's bottom edge following the
+ * {@link SpectrumSource} output with exponential smoothing; the topmost lit
+ * pixel is mixed toward white for a bright "peak" LED look.
  */
 export class Spectrogram {
   readonly container: ParticleContainer;
@@ -13,6 +14,7 @@ export class Spectrogram {
   private particles: Particle[] = [];
   private heights = new Float32Array(0);
   private cols = 0;
+  private rows = 0;
   private bandRows = 0;
 
   constructor(texture: Texture) {
@@ -28,8 +30,14 @@ export class Spectrogram {
     return this.cols;
   }
 
+  /** Top grid row of the spectrogram band (rows above it are free field). */
+  get bandTopRow(): number {
+    return this.rows - this.bandRows;
+  }
+
   layout(cols: number, rows: number, stride: number, pixelSize: number): void {
     this.cols = cols;
+    this.rows = rows;
     this.bandRows = Math.max(6, Math.round(rows * 0.16));
     const topRow = rows - this.bandRows;
 
@@ -56,7 +64,7 @@ export class Spectrogram {
   }
 
   update(dt: number, spectrum: Float32Array, accent: number): void {
-    const k = expDamp(dt, 90); // frame-rate independent smoothing
+    const k = expDamp(dt, TUNING.spectrum.halfLifeMs); // frame-rate independent smoothing
     const { bandRows, cols } = this;
 
     for (let c = 0; c < cols; c++) {
@@ -64,12 +72,15 @@ export class Spectrogram {
       this.heights[c] += (target - this.heights[c]) * k;
       const lit = Math.round(this.heights[c] * bandRows);
       const base = c * bandRows;
+      // Flip: bars grow upward from the band's bottom edge (screen bottom),
+      // white peak LED on top of each bar.
+      const firstLit = bandRows - lit;
 
       for (let r = 0; r < bandRows; r++) {
         const p = this.particles[base + r];
-        if (r < lit) {
+        if (r >= firstLit && lit > 0) {
           p.alpha = 1;
-          p.tint = r === lit - 1 ? mixColor(accent, 0xffffff, 0.5) : accent;
+          p.tint = r === firstLit ? mixColor(accent, 0xffffff, 0.5) : accent;
         } else {
           p.alpha = 0;
         }

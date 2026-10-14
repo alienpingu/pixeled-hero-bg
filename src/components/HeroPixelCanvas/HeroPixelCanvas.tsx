@@ -24,15 +24,16 @@ export function HeroPixelCanvas({
   ...configProps
 }: HeroPixelCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  usePixelGridEngine(hostRef, configProps);
+  usePixelGridEngine(hostRef, { ...configProps, backgroundColor });
 
   return (
     <div
       className={`relative isolate overflow-hidden ${className}`}
       style={{ backgroundColor: backgroundColor ?? '#0d0d0d' }}
     >
-      {/* Pixi canvas host — the engine appends its canvas here. */}
-      <div ref={hostRef} className="absolute inset-0" aria-hidden="true" />
+      {/* Pixi canvas host — the engine appends its canvas here.
+          touch-none/select-none: instant tap-to-glitch, no scroll/selection quirks. */}
+      <div ref={hostRef} className="absolute inset-0 touch-none select-none" aria-hidden="true" />
       {/* UI overlay: transparent to pointer events except explicit children. */}
       <div className="pointer-events-none relative z-10 h-full w-full">{children}</div>
     </div>

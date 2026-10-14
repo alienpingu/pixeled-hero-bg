@@ -1,4 +1,5 @@
 import { clamp01 } from '../color';
+import { TUNING } from '../tuning';
 import type { SpectrumSource } from './SpectrumSource';
 
 /**
@@ -18,7 +19,7 @@ export class MockSpectrumSource implements SpectrumSource {
 
   sample(bins: number, dtMs: number, out: Float32Array): Float32Array {
     if (this.walk.length !== bins) this.walk = new Float32Array(bins);
-    this.time += dtMs / 1000;
+    this.time += ((dtMs / 1000) * TUNING.spectrum.timeScale);
     const t = this.time;
 
     for (let i = 0; i < bins; i++) {
@@ -31,7 +32,7 @@ export class MockSpectrumSource implements SpectrumSource {
         Math.sin(t * 0.47 + i * 1.9) * 0.3 +
         Math.sin(t * (2.1 + f * 2.3) + i) * 0.2;
       // Random walk with mean reversion for organic jitter.
-      this.walk[i] = (this.walk[i] + (Math.random() - 0.5) * 0.12) * 0.92;
+      this.walk[i] = (this.walk[i] + (Math.random() - 0.5) * TUNING.spectrum.walkStep) * 0.92;
 
       out[i] = clamp01(envelope * (0.55 + 0.45 * s) * this.intensity + this.walk[i]);
     }

@@ -1,9 +1,11 @@
 import { Particle, ParticleContainer, type Texture } from 'pixi.js';
 import { rasterizeText, type RasterText } from '../bitmapFont';
+import { TUNING } from '../tuning';
 import type { GlitchView } from '../types';
 
 /**
- * Central pixelated "logo" text, rasterized from the 5×7 bitmap font.
+ * Central pixelated "logo" text, rasterized from the 5×7 bitmap font with
+ * each font pixel expanded to a 2×2 block of grid cells.
  * Renders as accent-tinted particles with a slow breathing alpha and
  * occasional per-glyph flicker; during glitches it jitters, drops out and
  * flash-frames in white.
@@ -20,7 +22,9 @@ export class PixelText {
   private rows = 0;
   private stride = 16;
   private pixelSize = 16;
-  private flickerTimer = 400;
+  /** cols×rows mask: 1 where a lit glyph cell sits (for collision). */
+  private occupancy = new Uint8Array(0);
+  private flickerTimer: number = TUNING.text.flickerEveryMin;
   private flickerGlyph = -1;
   private flickerTtl = 0;
 
@@ -47,14 +51,15 @@ export class PixelText {
 
   update(dt: number, time: number, accent: number, glitch: GlitchView): void {
     const t = time / 1000;
-    const breath = 0.78 + 0.22 * Math.sin(t * Math.PI * 0.8);
+    const { breathHz, breathDepth, flickerEveryMin, flickerEveryJitter } = TUNING.text;
+    const breath = 1 - breathDepth + breathDepth * Math.sin(t * Math.PI * 2 * breathHz);
 
     // Periodic single-glyph flicker (CRT dropout feel).
     this.flickerTimer -= dt;
     if (this.flickerTimer <= 0 && this.glyphRanges.length > 0) {
       this.flickerGlyph = (Math.random() * this.glyphRanges.length) | 0;
       this.flickerTtl = 50 + Math.random() * 90;
-      this.flickerTimer = 280 + Math.random() * 720;
+      this.flickerTimer = flickerEveryMin + Math.random() * flickerEveryJitter;
     }
     if (this.flickerTtl > 0) this.flickerTtl -= dt;
 
@@ -64,16 +69,20 @@ export class PixelText {
     let positionsDirty = false;
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i];
-      let alpha = breath + 0.08 * Math.sin(t * 2.4 + this.phases[i]);
+      let alpha = breath + 0.05 * Math.sin(t * 1.2 + this.phases[i]);
       let tint = accent;
 
       if (flickering && i >= range!.start && i < range!.end) alpha *= 0.12;
 
       if (glitch.active) {
+        const { glitchDropoutChance, glitchFlashChance, glitchJitterCells } = TUNING.text;
         const roll = Math.random();
-        if (roll < 0.07) alpha = 0; // dropout
-        else if (roll < 0.28) tint = Math.random() < 0.5 ? 0xffffff : accent;
-        const jitter = (((Math.random() * 5) | 0) - 2) * this.stride;
+        if (roll < glitchDropoutChance) alpha = 0;
+        else if (roll < glitchDropoutChance + glitchFlashChance) {
+          tint = Math.random() < 0.5 ? 0xffffff : accent;
+        }
+        const span = glitchJitterCells * 2 + 1;
+        const jitter = (((Math.random() * span) | 0) - glitchJitterCells) * this.stride;
         if (jitter !== 0) {
           p.x = this.baseX[i] + jitter;
           positionsDirty = true;
@@ -96,6 +105,12 @@ export class PixelText {
     this.container.update();
   }
 
+  /** True where a lit glyph cell occupies the given grid cell. */
+  isOccupied(col: number, row: number): boolean {
+    if (col < 0 || row < 0 || col >= this.cols || row >= this.rows) return false;
+    return this.occupancy[row * this.cols + col] === 1;
+  }
+
   destroy(): void {
     this.container.destroy({ children: true });
     this.particles = [];
@@ -107,6 +122,7 @@ export class PixelText {
     this.glyphRanges = [];
 
     const { glyphs, width, height } = this.raster;
+    this.occupancy = new Uint8Array(this.cols * this.rows);
     if (width === 0 || this.cols === 0) {
       this.phases = new Float32Array(0);
       this.baseX = new Float32Array(0);
@@ -123,10 +139,15 @@ export class PixelText {
     for (const glyph of glyphs) {
       const start = this.particles.length;
       for (const { col, row } of glyph.cells) {
+        const absCol = originCol + col;
+        const absRow = originRow + row;
+        // Over-long logoText can overflow the grid — skip those cells entirely.
+        if (absCol < 0 || absCol >= this.cols || absRow < 0 || absRow >= this.rows) continue;
+        this.occupancy[absRow * this.cols + absCol] = 1;
         const p = new Particle({
           texture: this.container.texture,
-          x: (originCol + col) * this.stride,
-          y: (originRow + row) * this.stride,
+          x: absCol * this.stride,
+          y: absRow * this.stride,
           // Texture.WHITE is 1×1 — scale it up to a full LED square.
           scaleX: this.pixelSize,
           scaleY: this.pixelSize,

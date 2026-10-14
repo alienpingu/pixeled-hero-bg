@@ -12,6 +12,14 @@ export interface EngineConfig {
    * (antialias: false) gaps flicker between 1–3px.
    */
   gap: number;
+  /**
+   * Shrink the cell size on narrow screens so the grid keeps a usable column
+   * count (phones get ~5–8px LEDs instead of a clipped matrix).
+   * `pixelSize`/`gap` act as the maximums on wide screens.
+   */
+  responsive: boolean;
+  /** Smallest allowed LED edge when `responsive` is on. @default 5 */
+  minPixelSize: number;
   /** Accent color (CSS hex) used for logo text, spectrogram and glitch flashes. */
   accentColor: string;
   /** Canvas clear color. */
@@ -30,6 +38,8 @@ export interface EngineConfig {
 export const DEFAULT_CONFIG: EngineConfig = {
   pixelSize: 16, // 1rem
   gap: 2, // 0.125rem ≈ the requested 0.1rem, rounded to a whole pixel
+  responsive: true,
+  minPixelSize: 5,
   accentColor: '#4ade80',
   backgroundColor: '#0d0d0d',
   enableGlitchOnClick: true,

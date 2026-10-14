@@ -2,6 +2,9 @@
  * Minimal 5×7 bitmap font used to rasterize the central "pixel logo" text.
  * Each glyph is 7 rows of 5 columns; '#' = lit LED, '.' = off.
  *
+ * Every font pixel is expanded into a {@link PIXEL_SCALE}×{@link PIXEL_SCALE}
+ * block of grid cells, so the logo reads as chunky 2×2 LED squares.
+ *
  * To extend: add more glyphs to GLYPHS (keep the 5×7 shape) — the engine
  * only looks characters up through {@link getGlyph}.
  */
@@ -52,7 +55,10 @@ const GLYPHS: Record<string, readonly string[]> = {
 
 export const GLYPH_WIDTH = 5;
 export const GLYPH_HEIGHT = 7;
-export const GLYPH_GAP = 1; // empty columns between glyphs, in grid cells
+export const GLYPH_GAP = 1; // empty columns between glyphs, in glyph cells
+
+/** Grid cells covered by one font pixel — each '#' becomes a 2×2 LED block. */
+export const PIXEL_SCALE = 2;
 
 /** Returns the glyph rows for `char`, falling back to '?' for unknown characters. */
 export function getGlyph(char: string): readonly string[] {
@@ -76,7 +82,7 @@ export interface RasterText {
 }
 
 /** Rasterize a text string into lit grid cells (uppercase, unknown → '?'). */
-export function rasterizeText(text: string): RasterText {
+export function rasterizeText(text: string, scale: number = PIXEL_SCALE): RasterText {
   const glyphs: RasterGlyph[] = [];
   let width = 0;
   for (let i = 0; i < text.length; i++) {
@@ -86,7 +92,13 @@ export function rasterizeText(text: string): RasterText {
     for (let r = 0; r < GLYPH_HEIGHT; r++) {
       const line = rows[r];
       for (let c = 0; c < GLYPH_WIDTH; c++) {
-        if (line[c] === '#') cells.push({ col: c, row: r });
+        if (line[c] !== '#') continue;
+        // Expand one font pixel into a scale×scale block of grid cells.
+        for (let dy = 0; dy < scale; dy++) {
+          for (let dx = 0; dx < scale; dx++) {
+            cells.push({ col: c * scale + dx, row: r * scale + dy });
+          }
+        }
       }
     }
     const offsetX = width;
@@ -94,7 +106,7 @@ export function rasterizeText(text: string): RasterText {
       char,
       cells: cells.map(({ col, row }) => ({ col: col + offsetX, row })),
     });
-    width += GLYPH_WIDTH + (i < text.length - 1 ? GLYPH_GAP : 0);
+    width += (GLYPH_WIDTH + (i < text.length - 1 ? GLYPH_GAP : 0)) * scale;
   }
-  return { glyphs, width, height: GLYPH_HEIGHT };
+  return { glyphs, width, height: GLYPH_HEIGHT * scale };
 }

@@ -1,13 +1,17 @@
 import { Application, Texture, type Ticker } from 'pixi.js';
 import { toPixiColor } from './color';
+import { BouncingSquare } from './layers/BouncingSquare';
 import { PixelGrid } from './layers/PixelGrid';
 import { PixelText } from './layers/PixelText';
 import { Spectrogram } from './layers/Spectrogram';
+import { computeCellMetrics } from './metrics';
 import { MockSpectrumSource } from './spectrum/MockSpectrumSource';
+import { TUNING } from './tuning';
 import type { SpectrumSource } from './spectrum/SpectrumSource';
 import type { EngineConfig, GlitchView } from './types';
 
-const GLITCH_DURATION_MS = 520;
+/** Wait for the screen size to settle before rebuilding (mobile URL-bar churn). */
+const RESIZE_DEBOUNCE_MS = 140;
 
 /**
  * Full-screen Pixi.js canvas manager for the LED pixel-grid background.
@@ -33,12 +37,16 @@ export class PixelGridEngine {
   private grid: PixelGrid | null = null;
   private text: PixelText | null = null;
   private spectro: Spectrogram | null = null;
+  private square: BouncingSquare | null = null;
+  private readonly isTextCell = (col: number, row: number): boolean =>
+    this.text ? this.text.isOccupied(col, row) : false;
 
   private spectrumBuf = new Float32Array(0);
   private glitch = { active: false, t: 0, intensity: 1, originCol: 0, originRow: 0 };
   private lastW = 0;
   private lastH = 0;
   private time = 0;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private initialized = false;
   private disposed = false;
   private canvas: HTMLCanvasElement | null = null;
@@ -70,7 +78,14 @@ export class PixelGridEngine {
       this.spectrumSource.intensity = next.audioReactivity ? 1.35 : 1;
     }
     if (next.logoText !== prev.logoText) this.text?.setText(next.logoText);
-    // NOTE: `pixelSize` / `gap` are structural — the React hook rebuilds the engine.
+
+    // Sizing fields only need a re-layout (cell metrics are derived in layout()).
+    const sizingChanged =
+      next.pixelSize !== prev.pixelSize ||
+      next.gap !== prev.gap ||
+      next.responsive !== prev.responsive ||
+      next.minPixelSize !== prev.minPixelSize;
+    if (sizingChanged && this.initialized) this.layout();
   }
 
   /** Trigger the scramble/glitch effect. `origin` defaults to the canvas center. */
@@ -78,16 +93,19 @@ export class PixelGridEngine {
     if (!this.grid || !this.text) return;
     const stride = this.grid.stride;
     this.glitch.active = true;
-    this.glitch.t = GLITCH_DURATION_MS;
+    this.glitch.t = TUNING.glitch.durationMs;
     this.glitch.intensity = Math.min(1, Math.max(0, intensity));
     this.glitch.originCol = originCol ?? Math.floor(this.lastW / stride / 2);
     this.glitch.originRow = originRow ?? Math.floor(this.lastH / stride / 2);
-    this.grid.beginGlitch();
   }
 
   destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.resizeTimer !== null) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
     this.canvas?.removeEventListener('pointerdown', this.onPointerDown);
     this.spectrumSource.stop();
     if (this.initialized) this.destroyPixi();
@@ -117,10 +135,16 @@ export class PixelGridEngine {
     this.host.appendChild(canvas);
 
     const texture = Texture.WHITE; // single shared 1×1 texture for every LED
-    this.grid = new PixelGrid(texture, this.cfg.pixelSize, this.cfg.gap);
+    this.grid = new PixelGrid(texture);
     this.text = new PixelText(texture);
     this.spectro = new Spectrogram(texture);
-    this.app.stage.addChild(this.grid.container, this.text.container, this.spectro.container);
+    this.square = new BouncingSquare(texture);
+    this.app.stage.addChild(
+      this.grid.container,
+      this.text.container,
+      this.spectro.container,
+      this.square.container,
+    );
     this.text.setText(this.cfg.logoText);
     this.layout();
 
@@ -138,28 +162,41 @@ export class PixelGridEngine {
     this.lastW = width;
     this.lastH = height;
 
-    const stride = this.grid!.stride;
-    const cols = Math.ceil(width / stride);
-    const rows = Math.ceil(height / stride);
+    // Responsive cell sizing: shrink LEDs on narrow screens so the column
+    // count (and the bitmap text) always fits.
+    const metrics = computeCellMetrics(width, this.cfg);
+    const cols = Math.ceil(width / metrics.stride);
+    const rows = Math.ceil(height / metrics.stride);
 
-    this.grid!.layout(cols, rows);
-    this.spectro!.layout(cols, rows, stride, this.cfg.pixelSize);
-    this.text!.layout(cols, rows, stride, this.cfg.pixelSize);
+    this.grid!.layout(cols, rows, metrics.pixelSize, metrics.gap);
+    this.spectro!.layout(cols, rows, metrics.stride, metrics.pixelSize);
+    this.text!.layout(cols, rows, metrics.stride, metrics.pixelSize);
+    this.square!.layout(cols, rows, metrics.stride, metrics.pixelSize, this.spectro!.bandTopRow);
 
     if (this.spectrumBuf.length !== this.spectro!.columnCount) {
       this.spectrumBuf = new Float32Array(this.spectro!.columnCount);
     }
   }
 
+  /** Debounced relayout — mobile URL-bar resizes fire continuously while scrolling. */
+  private scheduleLayout(): void {
+    if (this.resizeTimer !== null) return;
+    this.resizeTimer = setTimeout(() => {
+      this.resizeTimer = null;
+      if (!this.disposed && this.initialized) this.layout();
+    }, RESIZE_DEBOUNCE_MS);
+  }
+
   private tick = (ticker: Ticker): void => {
-    if (this.disposed || !this.grid || !this.text || !this.spectro) return;
+    if (this.disposed || !this.grid || !this.text || !this.spectro || !this.square) return;
 
     const dt = Math.min(ticker.elapsedMS, 100); // clamp tab-switch spikes
     this.time += dt;
 
-    // ResizePlugin resizes the renderer silently — detect it here.
+    // ResizePlugin resizes the renderer silently — detect it here (debounced,
+    // because mobile browsers fire continuous resizes while the URL bar moves).
     if (this.app.screen.width !== this.lastW || this.app.screen.height !== this.lastH) {
-      this.layout();
+      this.scheduleLayout();
     }
 
     if (this.glitch.active) {
@@ -175,7 +212,7 @@ export class PixelGridEngine {
       ? {
           active: true,
           intensity: this.glitch.intensity,
-          progress: 1 - this.glitch.t / GLITCH_DURATION_MS,
+          progress: 1 - this.glitch.t / TUNING.glitch.durationMs,
           originCol: this.glitch.originCol,
           originRow: this.glitch.originRow,
         }
@@ -186,6 +223,7 @@ export class PixelGridEngine {
     this.grid.update(dt, this.time, this.accent, glitchView);
     this.text.update(dt, this.time, this.accent, glitchView);
     this.spectro.update(dt, this.spectrumBuf, this.accent);
+    this.square.update(dt, this.accent, this.isTextCell, this.glitch.active);
   };
 
   private onPointerDown = (ev: PointerEvent): void => {
@@ -211,6 +249,7 @@ export class PixelGridEngine {
     this.grid?.destroy();
     this.text?.destroy();
     this.spectro?.destroy();
+    this.square?.destroy();
     this.app.destroy(
       { removeView: true, releaseGlobalResources: true },
       { children: true, texture: true, textureSource: true },
