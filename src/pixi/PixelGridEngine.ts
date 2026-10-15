@@ -33,6 +33,8 @@ export class PixelGridEngine {
   private readonly app = new Application();
   private readonly host: HTMLElement;
   private readonly spectrumSource: SpectrumSource;
+  /** True when a real track drives the visuals (gates the roaming square). */
+  private readonly audioConfigured: boolean;
   private cfg: EngineConfig;
   private accent: number;
 
@@ -63,6 +65,7 @@ export class PixelGridEngine {
       config.audioReactivity && config.audioSrc
         ? new WebAudioSpectrumSource(config.audioSrc, config.muted)
         : new MockSpectrumSource();
+    this.audioConfigured = this.spectrumSource instanceof WebAudioSpectrumSource;
   }
 
   static async create(host: HTMLElement, config: EngineConfig): Promise<PixelGridEngine> {
@@ -245,6 +248,9 @@ export class PixelGridEngine {
     this.text.update(dt, this.time, this.accent, glitchView, beat);
     // No music playing → the equalizer stays collapsed (fades out smoothly).
     this.spectro.update(dt, this.spectrumBuf, this.accent, playing);
+    // The roaming highlight square only appears once the music is unmuted, so
+    // a muted/idle background stays clean. Non-audio setups keep it as before.
+    this.square.container.visible = playing || !this.audioConfigured;
     this.square.update(dt, this.accent, this.isTextCell, this.glitch.active);
   };
 
