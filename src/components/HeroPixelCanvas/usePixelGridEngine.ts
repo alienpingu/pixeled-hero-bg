@@ -13,6 +13,8 @@ function resolveConfig(props: HeroPixelCanvasProps): EngineConfig {
     backgroundColor: props.backgroundColor ?? DEFAULT_CONFIG.backgroundColor,
     enableGlitchOnClick: props.enableGlitchOnClick ?? DEFAULT_CONFIG.enableGlitchOnClick,
     audioReactivity: props.audioReactivity ?? DEFAULT_CONFIG.audioReactivity,
+    audioSrc: props.audioSrc ?? DEFAULT_CONFIG.audioSrc,
+    muted: props.muted ?? DEFAULT_CONFIG.muted,
     logoText: props.logoText ?? DEFAULT_CONFIG.logoText,
   };
 }
@@ -23,11 +25,13 @@ function resolveConfig(props: HeroPixelCanvasProps): EngineConfig {
  * - Creates the engine on mount; destroys it on unmount (StrictMode-safe).
  * - All prop changes (including sizing) are applied to the live engine via
  *   `setConfig` — sizing triggers an internal re-layout, no re-init needed.
+ * - Returns the engine ref so callers can drive imperative, gesture-bound
+ *   actions (e.g. `setMuted`) synchronously from a click handler.
  */
 export function usePixelGridEngine(
   hostRef: RefObject<HTMLDivElement | null>,
   props: HeroPixelCanvasProps,
-): void {
+): RefObject<PixelGridEngine | null> {
   const engineRef = useRef<PixelGridEngine | null>(null);
   const propsRef = useRef(props);
 
@@ -62,4 +66,6 @@ export function usePixelGridEngine(
       engineRef.current = null;
     };
   }, [hostRef]);
+
+  return engineRef;
 }

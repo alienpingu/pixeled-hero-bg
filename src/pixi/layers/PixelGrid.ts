@@ -25,6 +25,7 @@ export class PixelGrid {
   private touchedList: number[] = [];
   private touchedTint: number[] = [];
   private touchedMark = new Uint8Array(0);
+  private prevBeat = 0;
 
   /** Current cell stride (pixelSize + gap), valid after `layout()`. */
   get stride(): number {
@@ -79,8 +80,14 @@ export class PixelGrid {
     this.container.update(); // positions are static
   }
 
-  update(dt: number, _time: number, accent: number, glitch: GlitchView): void {
+  /**
+   * Per-frame field update. `beat` is the music beat pulse [0,1]; its rising
+   * edge seeds a few extra accent hot dots so the field twinkles on rhythm.
+   */
+  update(dt: number, _time: number, accent: number, glitch: GlitchView, beat = 0): void {
     this.refreshNoise(dt, accent);
+    if (beat > this.prevBeat) this.seedBeatDots(accent, beat);
+    this.prevBeat = beat;
     if (glitch.active) this.applyGlitchFrame(accent, glitch);
   }
 
@@ -116,6 +123,22 @@ export class PixelGrid {
         particles[i].tint = grayRamp(Math.pow(Math.random(), 2.2));
         refreshIn[i] = refreshMin + Math.random() * refreshJitter;
       }
+    }
+  }
+
+  /**
+   * Seed a few random cells as accent hot dots on a beat edge. They use the
+   * normal hot-pixel hold timer, so they fade back into the static by
+   * themselves — no bookkeeping needed.
+   */
+  private seedBeatDots(accent: number, beat: number): void {
+    const { beatSpawn, hotHoldMin, hotHoldJitter } = TUNING.noise;
+    if (beatSpawn <= 0 || this.particles.length === 0) return;
+    const n = Math.max(1, Math.round(beatSpawn * beat));
+    for (let k = 0; k < n; k++) {
+      const i = (Math.random() * this.particles.length) | 0;
+      this.particles[i].tint = accent;
+      this.refreshIn[i] = hotHoldMin + Math.random() * hotHoldJitter;
     }
   }
 

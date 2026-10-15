@@ -26,11 +26,15 @@ export interface HeroPixelCanvasProps {
   /** Trigger the glitch scramble on canvas clicks. @default true */
   enableGlitchOnClick?: boolean;
   /**
-   * Run the spectrum source in "live" mode. Currently intensifies the mock
-   * signal; reserved for a real Web Audio AnalyserNode source.
+   * Analyse the real audio track and pump the spectrogram on its rhythm.
+   * Falls back to an intensified mock signal if the track fails to load.
    * @default false
    */
   audioReactivity?: boolean;
+  /** URL of the looping music track (same-origin asset under `public/`). @default '/song.mp3' */
+  audioSrc?: string;
+  /** Start with the music muted; a small toggle is rendered bottom-right. @default true */
+  muted?: boolean;
   /** Text rendered as pixel glyphs in the grid center (A–Z, 0–9). @default 'PIXEL' */
   logoText?: string;
   /** Extra class names for the outer wrapper (positioning, sizing, …). */

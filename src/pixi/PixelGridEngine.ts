@@ -6,6 +6,7 @@ import { PixelText } from './layers/PixelText';
 import { Spectrogram } from './layers/Spectrogram';
 import { computeCellMetrics } from './metrics';
 import { MockSpectrumSource } from './spectrum/MockSpectrumSource';
+import { WebAudioSpectrumSource } from './spectrum/WebAudioSpectrumSource';
 import { TUNING } from './tuning';
 import type { SpectrumSource } from './spectrum/SpectrumSource';
 import type { EngineConfig, GlitchView } from './types';
@@ -22,8 +23,9 @@ const RESIZE_DEBOUNCE_MS = 140;
  * issued while `create()` is still awaiting `Application.init()`.
  *
  * Extension notes:
- * - Spectrum analysis is delegated to a {@link SpectrumSource} — swap in a
- *   Web Audio implementation in `spectrum/SpectrumSource.ts` (commented recipe).
+ * - Spectrum analysis is delegated to a {@link SpectrumSource} — real Web
+ *   Audio (`WebAudioSpectrumSource`) when `audioReactivity` + `audioSrc` are
+ *   configured, otherwise the synthetic `MockSpectrumSource`.
  * - Window resizes are detected by comparing `app.screen` each tick (Pixi's
  *   ResizePlugin does not emit an event), then the layers are re-laid out.
  */
@@ -55,8 +57,12 @@ export class PixelGridEngine {
     this.host = host;
     this.cfg = { ...config };
     this.accent = toPixiColor(config.accentColor);
-    // Mock source today; replace with a WebAudioSpectrumSource when available.
-    this.spectrumSource = new MockSpectrumSource();
+    // Real Web Audio analysis when reactivity + a track are configured;
+    // otherwise the synthetic mock keeps the grid alive.
+    this.spectrumSource =
+      config.audioReactivity && config.audioSrc
+        ? new WebAudioSpectrumSource(config.audioSrc, config.muted)
+        : new MockSpectrumSource();
   }
 
   static async create(host: HTMLElement, config: EngineConfig): Promise<PixelGridEngine> {
@@ -77,6 +83,7 @@ export class PixelGridEngine {
     if (next.audioReactivity !== prev.audioReactivity && this.spectrumSource instanceof MockSpectrumSource) {
       this.spectrumSource.intensity = next.audioReactivity ? 1.35 : 1;
     }
+    if (next.muted !== prev.muted) this.setMuted(next.muted);
     if (next.logoText !== prev.logoText) this.text?.setText(next.logoText);
 
     // Sizing fields only need a re-layout (cell metrics are derived in layout()).
@@ -97,6 +104,18 @@ export class PixelGridEngine {
     this.glitch.intensity = Math.min(1, Math.max(0, intensity));
     this.glitch.originCol = originCol ?? Math.floor(this.lastW / stride / 2);
     this.glitch.originRow = originRow ?? Math.floor(this.lastH / stride / 2);
+  }
+
+  /**
+   * Mute/unmute the music output (a toggle click is a user gesture, so this
+   * can also be the call that starts a not-yet-started AudioContext).
+   */
+  setMuted(muted: boolean): void {
+    this.cfg.muted = muted;
+    if (this.spectrumSource instanceof WebAudioSpectrumSource) {
+      this.spectrumSource.setMuted(muted);
+      if (!muted) void this.spectrumSource.start();
+    }
   }
 
   destroy(): void {
@@ -219,18 +238,21 @@ export class PixelGridEngine {
       : { active: false, intensity: 0, progress: 1, originCol: 0, originRow: 0 };
 
     this.spectrumSource.sample(this.spectro.columnCount, dt, this.spectrumBuf);
+    const playing = this.spectrumSource.playing();
+    const beat = playing ? this.spectrumSource.beatPulse() : 0;
 
-    this.grid.update(dt, this.time, this.accent, glitchView);
-    this.text.update(dt, this.time, this.accent, glitchView);
-    this.spectro.update(dt, this.spectrumBuf, this.accent);
+    this.grid.update(dt, this.time, this.accent, glitchView, beat);
+    this.text.update(dt, this.time, this.accent, glitchView, beat);
+    // No music playing → the equalizer stays collapsed (fades out smoothly).
+    this.spectro.update(dt, this.spectrumBuf, this.accent, playing);
     this.square.update(dt, this.accent, this.isTextCell, this.glitch.active);
   };
 
   private onPointerDown = (ev: PointerEvent): void => {
-    if (!this.cfg.enableGlitchOnClick || !this.canvas || !this.grid) return;
-
-    // User gesture → a future Web Audio source can resume its AudioContext here.
+    // User gesture → resume the AudioContext / start playback (no-op for the mock).
     void this.spectrumSource.start();
+
+    if (!this.cfg.enableGlitchOnClick || !this.canvas || !this.grid) return;
 
     const rect = this.canvas.getBoundingClientRect();
     const stageX = ((ev.clientX - rect.left) / rect.width) * this.lastW;

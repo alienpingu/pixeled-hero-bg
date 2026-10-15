@@ -11,6 +11,8 @@ export const TUNING = {
     hotChance: 0.004,
     hotHoldMin: 200,
     hotHoldJitter: 300,
+    /** Accent dots seeded per beat edge (0 disables the rhythm reaction). */
+    beatSpawn: 6,
   },
   text: {
     /** Breathing cycle rate (cycles per second). */
@@ -24,13 +26,44 @@ export const TUNING = {
     glitchFlashChance: 0.12,
     /** Max horizontal jitter (in cells) per glyph pixel during glitches. */
     glitchJitterCells: 1,
+    /** Beat reaction (subtle): white mix + alpha lift at pulse peak. */
+    beatWhiteMix: 0.25,
+    beatAlphaLift: 0.1,
   },
   spectrum: {
     /** Global speed multiplier for the mock signal's phases. */
     timeScale: 0.55,
     walkStep: 0.05,
-    /** Smoothing half-life in ms (higher = lazier bars). */
-    halfLifeMs: 170,
+    /** Envelope half-life while a bar RISES — tiny for the instant spike attack. */
+    attackHalfLifeMs: 24,
+    /** Envelope half-life while a bar FALLS — long, lazy decay. */
+    releaseHalfLifeMs: 280,
+    /** Half-life of the white peak-cap falling down after a spike. */
+    peakFallHalfLifeMs: 420,
+  },
+  audio: {
+    /** Output volume when unmuted (mute is a GainNode on the output only). */
+    volume: 0.55,
+    /** Analyser smoothing time constant (0..1, lower = snappier bins). */
+    smoothing: 0.6,
+    /** Magnitude floor subtracted before renormalizing — kills room tone. */
+    floor: 0.1,
+    /** Byte-magnitude gamma (>1 keeps mids dim so peaks punch up). */
+    gamma: 0.85,
+    /** Fraction of spectrogram columns (from the bass edge) the beat pumps. */
+    pulseBandFraction: 0.25,
+    /** Extra energy multiplier on those columns at pulse peak. */
+    pulseGain: 0.4,
+    /** Pulse decay half-life in ms. */
+    pulseHalfLifeMs: 140,
+    /** Low-frequency bin count used for spectral-flux beat detection. */
+    fluxBassBins: 10,
+    /** Running-average half-life for the flux baseline (ms). */
+    fluxAvgHalfLifeMs: 400,
+    /** Flux must exceed baseline × this factor to count as a beat. */
+    fluxThreshold: 1.5,
+    /** Absolute flux floor so near-silence never triggers a "beat". */
+    fluxMin: 0.04,
   },
   glitch: {
     durationMs: 600,

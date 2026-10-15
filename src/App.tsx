@@ -17,6 +17,7 @@ export default function App() {
       logoText="brtsml"
       accentColor={theme.accent}
       backgroundColor={theme.background}
+      audioReactivity
     >
       <ThemeSwitcher theme={theme} onSelect={setThemeId} />
 

@@ -1,18 +1,22 @@
 import { Particle, ParticleContainer, type Texture } from 'pixi.js';
-import { expDamp, mixColor } from '../color';
+import { expDamp } from '../color';
 import { TUNING } from '../tuning';
 
 /**
  * Bottom-of-screen audio spectrum visualizer: one column of LED particles per
- * grid column. Bars rise upward from the screen's bottom edge following the
- * {@link SpectrumSource} output with exponential smoothing; the topmost lit
- * pixel is mixed toward white for a bright "peak" LED look.
+ * grid column, styled as a spike equalizer — bars snap up instantly (fast
+ * attack) and decay lazily, and a detached white peak-cap LED falls down on
+ * its own slower timer after each spike.
+ *
+ * The whole band is gated by `enabled` (music playing): when disabled the
+ * targets collapse to zero and everything fades out smoothly.
  */
 export class Spectrogram {
   readonly container: ParticleContainer;
 
   private particles: Particle[] = [];
   private heights = new Float32Array(0);
+  private peaks = new Float32Array(0);
   private cols = 0;
   private rows = 0;
   private bandRows = 0;
@@ -44,6 +48,7 @@ export class Spectrogram {
     this.container.removeParticles();
     this.particles = new Array(cols * this.bandRows);
     this.heights = new Float32Array(cols);
+    this.peaks = new Float32Array(cols);
 
     for (let c = 0; c < cols; c++) {
       for (let r = 0; r < this.bandRows; r++) {
@@ -63,24 +68,32 @@ export class Spectrogram {
     this.container.update();
   }
 
-  update(dt: number, spectrum: Float32Array, accent: number): void {
-    const k = expDamp(dt, TUNING.spectrum.halfLifeMs); // frame-rate independent smoothing
+  update(dt: number, spectrum: Float32Array, accent: number, enabled = true): void {
     const { bandRows, cols } = this;
+    const kAttack = expDamp(dt, TUNING.spectrum.attackHalfLifeMs);
+    const kRelease = expDamp(dt, TUNING.spectrum.releaseHalfLifeMs);
+    const peakDecay = Math.pow(0.5, dt / TUNING.spectrum.peakFallHalfLifeMs);
 
     for (let c = 0; c < cols; c++) {
-      const target = spectrum[c] ?? 0;
-      this.heights[c] += (target - this.heights[c]) * k;
+      const target = enabled ? (spectrum[c] ?? 0) : 0;
+      const h = this.heights[c];
+      this.heights[c] = h + (target - h) * (target > h ? kAttack : kRelease);
+      this.peaks[c] = Math.max(this.heights[c], this.peaks[c] * peakDecay);
+
       const lit = Math.round(this.heights[c] * bandRows);
-      const base = c * bandRows;
-      // Flip: bars grow upward from the band's bottom edge (screen bottom),
-      // white peak LED on top of each bar.
       const firstLit = bandRows - lit;
+      // Peak cap: the topmost LED of the held peak, falling independently.
+      const capRow = bandRows - 1 - Math.round(this.peaks[c] * (bandRows - 1));
+      const base = c * bandRows;
 
       for (let r = 0; r < bandRows; r++) {
         const p = this.particles[base + r];
         if (r >= firstLit && lit > 0) {
           p.alpha = 1;
-          p.tint = r === firstLit ? mixColor(accent, 0xffffff, 0.5) : accent;
+          p.tint = accent;
+        } else if (r === capRow && this.peaks[c] > 0.01) {
+          p.alpha = 1;
+          p.tint = 0xffffff;
         } else {
           p.alpha = 0;
         }

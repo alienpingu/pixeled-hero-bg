@@ -3,8 +3,9 @@ import { TUNING } from '../tuning';
 import type { SpectrumSource } from './SpectrumSource';
 
 /**
- * Synthetic spectrum used until a real Web Audio source is plugged in
- * (see SpectrumSource.ts for the upgrade path).
+ * Synthetic spectrum used while no real audio is playing — before the first
+ * user gesture (autoplay policy) or when {@link WebAudioSpectrumSource}
+ * can't load its track.
  *
  * The signal combines a low-frequency-weighted envelope (bass-heavy, like a
  * music visualizer), a few out-of-phase sine layers for rhythm, and a
@@ -45,5 +46,14 @@ export class MockSpectrumSource implements SpectrumSource {
 
   stop(): void {
     // Nothing to release for the mock source.
+  }
+
+  /** The mock is never "music playing" — it keeps the grid alive, not the equalizer. */
+  playing(): boolean {
+    return false;
+  }
+
+  beatPulse(): number {
+    return 0;
   }
 }

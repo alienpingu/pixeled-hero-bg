@@ -3,28 +3,14 @@
  * any frequency-analysis backend.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * FUTURE: real Web Audio API analysis
+ * Implementations
  * ──────────────────────────────────────────────────────────────────────────
- * Implement a `WebAudioSpectrumSource` with this shape (no rendering changes
- * required — PixelGridEngine only ever calls `sample()`):
- *
- *   const ctx = new AudioContext();                     // must start muted/`suspend()`
- *   const src = ctx.createMediaElementSource(el);       // or MediaStreamSource(mic)
- *   const analyser = ctx.createAnalyser();
- *   analyser.fftSize = 512;                             // → 256 frequency bins
- *   analyser.smoothingTimeConstant = 0.8;
- *   src.connect(analyser); // …and analyser → destination to keep audio audible
- *
- *   sample(bins: number) {
- *     analyser.getByteFrequencyData(this.data);         // Uint8Array(256), 0–255
- *     // Collapse 256 bins → `bins` bands (average or log-spaced grouping),
- *     // normalize to [0,1] and return. Low frequencies should land in low indexes.
- *   }
- *
- * AudioContext requires a user gesture before `ctx.resume()` — wire that to
- * the canvas `pointerdown` handler (the engine already calls `start()`
- * lazily on first interaction) and call `stop()` on unmount to disconnect
- * nodes and close the context.
+ * - {@link WebAudioSpectrumSource}: real analysis of a looping `<audio>`
+ *   track (AnalyserNode + spectral-flux beat detection). Selected by the
+ *   engine when `audioReactivity` is on and `audioSrc` is set; starts on the
+ *   canvas `pointerdown` gesture (see PixelGridEngine.onPointerDown).
+ * - {@link MockSpectrumSource}: synthetic fallback used before the first
+ *   gesture and whenever the real track is unavailable.
  */
 export interface SpectrumSource {
   /**
@@ -36,4 +22,11 @@ export interface SpectrumSource {
   start(): Promise<void>;
   /** Release resources. Safe to call repeatedly. */
   stop(): void;
+  /**
+   * True while audible music is actually playing — gates the spectrogram
+   * layer (no music, no equalizer) and the beat reaction on text/grid.
+   */
+  playing(): boolean;
+  /** Current beat pulse in [0,1] (1 = beat just hit, decaying). */
+  beatPulse(): number;
 }

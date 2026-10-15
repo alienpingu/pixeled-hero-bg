@@ -1,14 +1,15 @@
 import { Particle, ParticleContainer, type Texture } from 'pixi.js';
 import { rasterizeText, type RasterText } from '../bitmapFont';
+import { mixColor } from '../color';
 import { TUNING } from '../tuning';
 import type { GlitchView } from '../types';
 
 /**
  * Central pixelated "logo" text, rasterized from the 5×7 bitmap font with
  * each font pixel expanded to a 2×2 block of grid cells.
- * Renders as accent-tinted particles with a slow breathing alpha and
- * occasional per-glyph flicker; during glitches it jitters, drops out and
- * flash-frames in white.
+ * Renders as accent-tinted particles with a slow breathing alpha, a subtle
+ * white flash on each music beat and occasional per-glyph flicker; during
+ * glitches it jitters, drops out and flash-frames in white.
  */
 export class PixelText {
   readonly container: ParticleContainer;
@@ -49,7 +50,7 @@ export class PixelText {
     this.rebuild();
   }
 
-  update(dt: number, time: number, accent: number, glitch: GlitchView): void {
+  update(dt: number, time: number, accent: number, glitch: GlitchView, beat = 0): void {
     const t = time / 1000;
     const { breathHz, breathDepth, flickerEveryMin, flickerEveryJitter } = TUNING.text;
     const breath = 1 - breathDepth + breathDepth * Math.sin(t * Math.PI * 2 * breathHz);
@@ -73,6 +74,14 @@ export class PixelText {
       let tint = accent;
 
       if (flickering && i >= range!.start && i < range!.end) alpha *= 0.12;
+
+      // Subtle rhythm thump: lift toward full brightness and mix the tint
+      // slightly white on each beat (pulsing over the slow breathing).
+      if (beat > 0) {
+        const { beatWhiteMix, beatAlphaLift } = TUNING.text;
+        tint = mixColor(tint, 0xffffff, beatWhiteMix * beat);
+        alpha = Math.min(1, alpha + beatAlphaLift * beat);
+      }
 
       if (glitch.active) {
         const { glitchDropoutChance, glitchFlashChance, glitchJitterCells } = TUNING.text;

@@ -27,10 +27,15 @@ export interface EngineConfig {
   /** When true, pointer presses on the canvas trigger the glitch effect. */
   enableGlitchOnClick: boolean;
   /**
-   * When true the engine runs the spectrum source in "live" mode
-   * (intensified mock for now — swap in a Web Audio source, see SpectrumSource.ts).
+   * When true the engine analyses a real audio track (see {@link audioSrc})
+   * and pumps the spectrogram on its rhythm. Without a usable track it falls
+   * back to an intensified mock signal.
    */
   audioReactivity: boolean;
+  /** URL of the looping music track (same-origin asset under `public/`). */
+  audioSrc: string;
+  /** Start with the music muted (the analyser still drives the visuals). */
+  muted: boolean;
   /** Text rendered as pixel glyphs in the center of the grid. */
   logoText: string;
 }
@@ -44,6 +49,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   backgroundColor: '#0d0d0d',
   enableGlitchOnClick: true,
   audioReactivity: false,
+  audioSrc: '/song.mp3',
+  muted: true,
   logoText: 'PIXEL',
 };
 

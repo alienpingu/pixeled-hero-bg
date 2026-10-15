@@ -7,9 +7,9 @@ export interface CellMetrics {
 }
 
 /**
- * Minimum number of columns the grid should aim for. The 5×7 bitmap text
- * expanded at 2×2 ("PIXEL" = 58 cells) needs ~58+, so ~64 leaves margin
- * down to ~375px-wide phones.
+ * Minimum number of columns the grid should aim for. The condensed 4–5×7
+ * blackletter text expanded at 2×2 ("BRTSML" = 58 cells) needs ~58+, so ~64
+ * leaves margin down to ~375px-wide phones.
  */
 const TARGET_COLUMNS = 64;
 
