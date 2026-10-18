@@ -37,6 +37,8 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:lib": "vite build --config vite.lib.config.ts --watch",
+    "dev:types": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "build": "tsc -b && vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json",
     "build:demo": "vite build",
     "preview": "vite preview",
