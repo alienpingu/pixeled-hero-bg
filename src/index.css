@@ -2,10 +2,10 @@
 
 /* Page shell: monospace cyberpunk base. */
 :root {
-  /* Active theme — kept in sync by useTheme(). */
-  --accent: #cba6f7;
-  --bg: #1e1e2e;
-  --text: #cdd6f4;
+  /* Gruvbox — mirrors src/theme.ts. */
+  --accent: #fe8019;
+  --bg: #282828;
+  --text: #ebdbb2;
 }
 
 html,
