@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# playground demo build
+.demo-dist
+demo-dist

@@ -1,27 +1,60 @@
 {
-  "name": "pixeled-hero-bg",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@brtsml/pixeled-hero",
+  "version": "0.1.0",
+  "description": "Omarchy-style pixel-canvas hero for React — dithered LED fog, bitmap-glyph text, pointer glow, stamp ripples, audio spectrum and reveal animations. One 2D canvas, zero runtime deps.",
+  "keywords": [
+    "react",
+    "canvas",
+    "pixel",
+    "led",
+    "hero",
+    "background",
+    "dither",
+    "animation",
+    "audio-reactive"
+  ],
+  "license": "MIT",
+  "author": "Samuele Bertocco",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sbertocco/pixeled-hero.git"
+  },
+  "homepage": "https://github.com/sbertocco/pixeled-hero#readme",
+  "bugs": {
+    "url": "https://github.com/sbertocco/pixeled-hero/issues"
+  },
   "type": "module",
+  "private": false,
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json",
+    "build:demo": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "prepublishOnly": "npm run lint && npm run build"
   },
-  "dependencies": {
-    "pixi.js": "^8.22.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
-    "tailwindcss": "^4.3.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }

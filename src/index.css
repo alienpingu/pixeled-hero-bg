@@ -1,11 +1,9 @@
-@import 'tailwindcss';
-
-/* Page shell: monospace cyberpunk base. */
+/* Page shell: monospace base for the playground. */
 :root {
-  /* Gruvbox — mirrors src/theme.ts. */
-  --accent: #fe8019;
-  --bg: #282828;
-  --text: #ebdbb2;
+  --hud-fg: #c0caf5;
+  --hud-dim: #8b93b8;
+  --hud-bg: rgba(0, 0, 0, 0.45);
+  --hud-border: rgba(255, 255, 255, 0.14);
 }
 
 html,
@@ -16,10 +14,85 @@ body,
 
 body {
   margin: 0;
-  background-color: var(--bg);
-  color: var(--text);
+  background-color: #0e0e14;
+  color: var(--hud-fg);
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   -webkit-font-smoothing: antialiased;
-  /* Full-bleed canvas page: no pull-to-refresh rubber band on mobile. */
   overscroll-behavior: none;
+}
+
+.dvh-hero {
+  width: 100vw;
+  height: 100dvh;
+}
+
+/* Playground controls — a thin HUD over the canvas. */
+.hud {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+  background: var(--hud-bg);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  user-select: none;
+}
+
+.hud-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hud-row > span {
+  width: 58px;
+  color: var(--hud-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.hud input {
+  width: 120px;
+  padding: 4px 8px;
+  border: 1px solid var(--hud-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--hud-fg);
+  font: inherit;
+  text-transform: uppercase;
+}
+
+.hud button {
+  padding: 4px 8px;
+  border: 1px solid var(--hud-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--hud-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hud button:hover {
+  color: var(--hud-fg);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.hud button.on {
+  color: #0e0e14;
+  background: var(--hud-fg);
+  border-color: var(--hud-fg);
+}
+
+.hud-hint {
+  margin: 0;
+  color: var(--hud-dim);
+  font-size: 10px;
 }
