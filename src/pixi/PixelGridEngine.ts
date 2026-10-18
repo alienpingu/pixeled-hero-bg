@@ -1,5 +1,5 @@
 import { Application, Texture, type Ticker } from 'pixi.js';
-import { toPixiColor } from './color';
+import { rampFromBackground, toPixiColor, type GrayRamp } from './color';
 import { BouncingSquare } from './layers/BouncingSquare';
 import { PixelGrid } from './layers/PixelGrid';
 import { PixelText } from './layers/PixelText';
@@ -37,6 +37,7 @@ export class PixelGridEngine {
   private readonly audioConfigured: boolean;
   private cfg: EngineConfig;
   private accent: number;
+  private ramp: GrayRamp;
 
   private grid: PixelGrid | null = null;
   private text: PixelText | null = null;
@@ -59,6 +60,7 @@ export class PixelGridEngine {
     this.host = host;
     this.cfg = { ...config };
     this.accent = toPixiColor(config.accentColor);
+    this.ramp = rampFromBackground(toPixiColor(config.backgroundColor));
     // Real Web Audio analysis when reactivity + a track are configured;
     // otherwise the synthetic mock keeps the grid alive.
     this.spectrumSource =
@@ -82,6 +84,10 @@ export class PixelGridEngine {
     if (next.accentColor !== prev.accentColor) this.accent = toPixiColor(next.accentColor);
     if (next.backgroundColor !== prev.backgroundColor) {
       this.app.renderer.background.color = next.backgroundColor;
+      // Theme swap: repaint the whole gray field with the new ramp instead of
+      // letting the old static decay through the slow per-cell noise timers.
+      this.ramp = rampFromBackground(toPixiColor(next.backgroundColor));
+      this.grid?.setRamp(this.ramp);
     }
     if (next.audioReactivity !== prev.audioReactivity && this.spectrumSource instanceof MockSpectrumSource) {
       this.spectrumSource.intensity = next.audioReactivity ? 1.35 : 1;
@@ -157,7 +163,7 @@ export class PixelGridEngine {
     this.host.appendChild(canvas);
 
     const texture = Texture.WHITE; // single shared 1×1 texture for every LED
-    this.grid = new PixelGrid(texture);
+    this.grid = new PixelGrid(texture, this.ramp);
     this.text = new PixelText(texture);
     this.spectro = new Spectrogram(texture);
     this.square = new BouncingSquare(texture);

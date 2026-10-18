@@ -1,5 +1,5 @@
 import { Particle, ParticleContainer, type Texture } from 'pixi.js';
-import { grayRamp, mixColor } from '../color';
+import { grayRamp, mixColor, type GrayRamp } from '../color';
 import { TUNING } from '../tuning';
 import type { GlitchView } from '../types';
 
@@ -17,6 +17,7 @@ export class PixelGrid {
 
   private particles: Particle[] = [];
   private refreshIn = new Float32Array(0);
+  private ramp: GrayRamp;
   private cols = 0;
   private rows = 0;
   private currentStride = 18;
@@ -32,12 +33,25 @@ export class PixelGrid {
     return this.currentStride;
   }
 
-  constructor(texture: Texture) {
+  constructor(texture: Texture, ramp: GrayRamp) {
+    this.ramp = ramp;
     this.container = new ParticleContainer({
       texture,
       roundPixels: true,
       dynamicProperties: { position: false, color: true },
     });
+  }
+
+  /**
+   * Swap the theme's gray ramp and repaint the whole field immediately —
+   * waiting for the slow per-cell noise re-rolls would leave the old static
+   * hanging around after a theme switch.
+   */
+  setRamp(ramp: GrayRamp): void {
+    this.ramp = ramp;
+    for (let i = 0; i < this.particles.length; i++) {
+      this.particles[i].tint = grayRamp(ramp, Math.pow(Math.random(), 2.2));
+    }
   }
 
   /**
@@ -70,7 +84,7 @@ export class PixelGrid {
           // Texture.WHITE is 1×1 — scale it up to a full LED square.
           scaleX: pixelSize,
           scaleY: pixelSize,
-          tint: grayRamp(v),
+          tint: grayRamp(this.ramp, v),
         });
         this.particles[i] = p;
         this.refreshIn[i] = TUNING.noise.refreshMin + Math.random() * TUNING.noise.refreshJitter;
@@ -120,7 +134,7 @@ export class PixelGrid {
         particles[i].tint = accent;
         refreshIn[i] = hotHoldMin + Math.random() * hotHoldJitter;
       } else {
-        particles[i].tint = grayRamp(Math.pow(Math.random(), 2.2));
+        particles[i].tint = grayRamp(this.ramp, Math.pow(Math.random(), 2.2));
         refreshIn[i] = refreshMin + Math.random() * refreshJitter;
       }
     }
@@ -148,15 +162,16 @@ export class PixelGrid {
     this.restoreTouched();
 
     // Single expanding ring from the click origin: eased outward, continuous,
-    // and fading from bright accent to dim gray as it travels. Nothing else
-    // in the field changes — the ring is the entire click effect here.
+    // and fading from bright accent into the field's own dim tone as it
+    // travels. Nothing else in the field changes — the ring is the entire
+    // click effect here.
     const { ringWidth, ringContinuity, ringWhiteMix } = TUNING.glitch;
     const p = glitch.progress;
     const eased = 1 - (1 - p) * (1 - p); // easeOutQuad
     const ringR = eased * Math.hypot(this.cols, this.rows) * 0.6;
     const ringColor = mixColor(
       mixColor(accent, 0xffffff, ringWhiteMix * (1 - p)),
-      0x141414,
+      this.ramp.dim,
       p * 0.6,
     );
     const { originCol, originRow } = glitch;
